@@ -1,0 +1,50 @@
+name: Build Lenovo MSM8917 Kernel
+on:
+  workflow_dispatch: # Allows you to run this manually from the Actions tab
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04 # Use 20.04 for better legacy compatibility
+    steps:
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Build Essentials
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential flex git libssl-dev libelf-dev libncurses-dev rsync gcc-aarch64-linux-gnu
+
+      - name: Setup Toolchain
+        run: |
+          git clone --depth 1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git $GITHUB_WORKSPACE/toolchain
+
+      - name: Build Kernel
+        run: |
+          export ARCH=arm64
+          export CROSS_COMPILE=$GITHUB_WORKSPACE/toolchain/bin/aarch64-linux-android-
+          
+          # 1. Generate Config
+          make msm8917_defconfig
+          
+          # 2. Force-enable Docker/LXC Support
+          echo "CONFIG_NAMESPACES=y" >> .config
+          echo "CONFIG_USER_NS=y" >> .config
+          echo "CONFIG_PID_NS=y" >> .config
+          echo "CONFIG_NET_NS=y" >> .config
+          echo "CONFIG_CGROUPS=y" >> .config
+          echo "CONFIG_MEMCG=y" >> .config
+          echo "CONFIG_VETH=y" >> .config
+          echo "CONFIG_BRIDGE=y" >> .config
+          echo "CONFIG_OVERLAY_FS=y" >> .config
+          
+          # 3. Compile (using -j2 because standard runners have 2 cores)
+          make oldconfig
+          make -j2
+          
+      - name: Upload Kernel Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lenovo-8504F-Kernel
+          path: arch/arm64/boot/Image.gz-dtb
